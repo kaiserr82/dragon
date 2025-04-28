@@ -1,0 +1,280 @@
+#!/usr/bin/env python3
+import tarfile
+import os
+import shutil
+import sys
+import urllib.request
+import json
+
+
+REPO_URL = "https://example.com/packages/packages.json"
+LOCAL_REPO = "/var/lib/mypm/repo.json"
+
+# Wo speichern wir die Infos über installierte Pakete?
+PACKAGE_DB = "/var/lib/pm/"
+INSTALLED_LIST = os.path.join(PACKAGE_DB, "installed.txt")
+
+class Colors:
+    HEADER = "\033[95m"
+    OKBLUE = "\033[94m"
+    OKCYAN = "\033[96m"
+    OKGREEN = "\033[92m"
+    WARNING = "\033[93m"
+    FAIL = "\033[91m"
+    ENDC = "\033[0m"
+    BOLD = "\033[1m"
+    UNDERLINE = "\033[4m"
+
+def colored(text, color):
+    return f"{color}{text}{Colors.ENDC}"
+
+def update_repo():
+    """Lädt die Paketliste vom Repository herunter."""
+    ensure_db()
+    print(colored("🌐 Lade Paketliste vom Repository...", Colors.OKBLUE))
+    try:
+        with urllib.request.urlopen(REPO_URL) as response:
+            repo_data = response.read()
+        with open(LOCAL_REPO, "wb") as f:
+            f.write(repo_data)
+        print(colored("✅ Paketliste aktualisiert.", Colors.OKGREEN))
+    except Exception as e:
+        print(colored(f"❌ Fehler beim Aktualisieren des Repos: {e}", Colors.FAIL))
+
+
+
+
+def ensure_db():
+    """Sicherstellen, dass das Paket-Datenbank-Verzeichnis existiert."""
+    os.makedirs(PACKAGE_DB, exist_ok=True)
+    if not os.path.exists(INSTALLED_LIST):
+        with open(INSTALLED_LIST, "w") as f:
+            f.write("")  # leere Datei
+
+def list_all_files(start_path="/"):
+    """Gibt eine Menge aller Dateipfade im System zurück."""
+    file_set = set()
+    for root, dirs, files in os.walk(start_path):
+        for f in files:
+            full_path = os.path.join(root, f)
+            file_set.add(full_path)
+    return file_set
+
+def show_info(pkg_name):
+    """Zeigt die Meta-Informationen eines Pakets an."""
+    ensure_db()
+    pkg_meta_path = os.path.join(PACKAGE_DB, pkg_name, "meta.txt")
+    if not os.path.exists(pkg_meta_path):
+        print(f"❌ Keine Metadaten für Paket '{pkg_name}' gefunden.")
+        return
+    
+    with open(pkg_meta_path, "r") as f:
+        meta_info = f.read()
+    
+    print(f"ℹ️ Paketinformationen für '{pkg_name}':\n")
+    print(meta_info)
+
+def check_integrity():
+    """Prüft, ob alle Dateien der installierten Pakete noch existieren."""
+    ensure_db()
+    installed = read_installed()
+    if not installed:
+        print("Keine Pakete installiert.")
+        return
+    
+    print("🛡️  Integritätsprüfung aller installierten Pakete:\n")
+    for pkg_name in installed:
+        files_list_path = os.path.join(PACKAGE_DB, pkg_name, "files.txt")
+        if not os.path.exists(files_list_path):
+            print(f"⚠️  {pkg_name}: Dateiliste fehlt!")
+            continue
+        
+        with open(files_list_path, "r") as f:
+            files = [line.strip() for line in f.readlines() if line.strip()]
+        
+        missing = []
+        for file_path in files:
+            if not os.path.exists(file_path):
+                missing.append(file_path)
+        
+        if missing:
+            print(f"❌ {pkg_name}: {len(missing)} fehlende Datei(en):")
+            for m in missing:
+                print(f"   - {m}")
+        else:
+            print(f"✅ {pkg_name}: Alle Dateien vorhanden.")
+
+
+def read_installed():
+    """Liest die Liste installierter Pakete."""
+    if not os.path.exists(INSTALLED_LIST):
+        return []
+    with open(INSTALLED_LIST, "r") as f:
+        return [line.strip() for line in f.readlines() if line.strip()]
+
+
+def write_installed(packages):
+    """Schreibt die Liste installierter Pakete."""
+    with open(INSTALLED_LIST, "w") as f:
+        f.write("\n".join(packages) + "\n")
+
+
+def install_package(pkg_name_or_path):
+    """Installiert ein Paket entweder von Datei oder aus dem Repository."""
+    ensure_db()
+    
+    if os.path.isfile(pkg_name_or_path):
+        # Lokale Datei
+        pkg_path = pkg_name_or_path
+    else:
+        # Aus Repository laden
+        if not os.path.exists(LOCAL_REPO):
+            print(colored("❌ Kein Repository lokal gefunden. Bitte zuerst 'mypm update' ausführen.", Colors.FAIL))
+            return
+        with open(LOCAL_REPO, "r") as f:
+            repo = json.load(f)
+        if pkg_name_or_path not in repo:
+            print(colored(f"❌ Paket '{pkg_name_or_path}' nicht im Repository.", Colors.FAIL))
+            return
+        url = repo[pkg_name_or_path]["url"]
+        print(colored(f"⬇️  Lade Paket {pkg_name_or_path} von {url}", Colors.OKBLUE))
+        pkg_path = f"/tmp/{pkg_name_or_path}.tar.gz"
+        urllib.request.urlretrieve(url, pkg_path)
+    
+    # Dann wie bisher: Paket installieren
+    install_package_from_tar(pkg_path)
+
+def install_package_from_tar(pkg_path):
+    """Installiert ein Paket aus einem .tar.gz Archiv und speichert installierte Dateien."""
+    # Hier kommt der vorherige Entpack- und Installationscode rein (mit Fortschritt usw.)
+
+
+
+def list_packages():
+    """Zeigt alle installierten Pakete an."""
+    ensure_db()
+    installed = read_installed()
+    if not installed:
+        print("Keine Pakete installiert.")
+    else:
+        print("Installierte Pakete:")
+        for pkg in installed:
+            print(f" - {pkg}")
+
+
+def remove_package(pkg_name):
+    """Entfernt ein installiertes Paket samt aller installierten Dateien."""
+    ensure_db()
+    installed = read_installed()
+    if pkg_name not in installed:
+        print(colored(f"❌ Paket '{pkg_name}' ist nicht installiert.", Colors.FAIL))
+        return
+
+    pkg_meta_path = os.path.join(PACKAGE_DB, pkg_name, "meta.txt")
+    files_list_path = os.path.join(PACKAGE_DB, pkg_name, "files.txt")
+
+    if not os.path.exists(pkg_meta_path) or not os.path.exists(files_list_path):
+        print(colored(f"❗ Metadaten oder Dateiliste für '{pkg_name}' fehlen.", Colors.WARNING))
+        return
+
+    with open(files_list_path, "r") as f:
+        files = [line.strip() for line in f.readlines() if line.strip()]
+
+    print(colored(f"⚠️  Deinstalliere '{pkg_name}'...", Colors.WARNING))
+
+    # Dateien löschen
+    for file_path in files:
+        if os.path.isfile(file_path):
+            try:
+                os.remove(file_path)
+                print(colored(f"🗑️  Datei gelöscht: {file_path}", Colors.OKGREEN))
+            except Exception as e:
+                print(colored(f"⚠️  Fehler beim Löschen von Datei {file_path}: {e}", Colors.WARNING))
+
+    # Verzeichnisse aufräumen
+    deleted_dirs = set()
+    for file_path in sorted(files, reverse=True):
+        dir_path = os.path.dirname(file_path)
+        while dir_path != "/" and dir_path not in deleted_dirs:
+            try:
+                if os.path.isdir(dir_path) and not os.listdir(dir_path):
+                    os.rmdir(dir_path)
+                    print(colored(f"🗑️  Leeres Verzeichnis gelöscht: {dir_path}", Colors.OKCYAN))
+                    deleted_dirs.add(dir_path)
+                else:
+                    break
+            except Exception:
+                break
+
+    shutil.rmtree(os.path.join(PACKAGE_DB, pkg_name))
+    installed.remove(pkg_name)
+    write_installed(installed)
+
+    print(colored(f"✅ Paket '{pkg_name}' vollständig entfernt.", Colors.OKGREEN))
+
+def upgrade_packages():
+    """Installiert neuere Versionen installierter Pakete."""
+    ensure_db()
+    if not os.path.exists(LOCAL_REPO):
+        print(colored("❌ Kein Repository lokal gefunden. Bitte zuerst 'mypm update' ausführen.", Colors.FAIL))
+        return
+    
+    with open(LOCAL_REPO, "r") as f:
+        repo = json.load(f)
+
+    installed = read_installed()
+    if not installed:
+        print(colored("Keine Pakete installiert.", Colors.WARNING))
+        return
+
+    for pkg_name in installed:
+        installed_meta_path = os.path.join(PACKAGE_DB, pkg_name, "meta.txt")
+        if not os.path.exists(installed_meta_path):
+            continue
+        with open(installed_meta_path, "r") as f:
+            meta_info = f.read()
+        installed_version = [line.split(":")[1].strip() for line in meta_info.splitlines() if line.startswith("Version")][0]
+
+        if pkg_name in repo:
+            repo_version = repo[pkg_name]["version"]
+            if repo_version > installed_version:
+                print(colored(f"⬆️  Upgrade verfügbar für {pkg_name}: {installed_version} → {repo_version}", Colors.WARNING))
+                install_package(pkg_name)
+            else:
+                print(colored(f"✅ {pkg_name} ist aktuell.", Colors.OKGREEN))
+        else:
+            print(colored(f"⚠️  {pkg_name} nicht mehr im Repository.", Colors.WARNING))
+
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: mypm install <package.tar.gz|name> | remove <package> | list | info <package> | check | update | upgrade")
+        sys.exit(1)
+
+    cmd = sys.argv[1]
+
+    if cmd == "install" and len(sys.argv) == 3:
+        install_package(sys.argv[2])
+    elif cmd == "remove" and len(sys.argv) == 3:
+        remove_package(sys.argv[2])
+    elif cmd == "list":
+        list_packages()
+    elif cmd == "info" and len(sys.argv) == 3:
+        show_info(sys.argv[2])
+    elif cmd == "check":
+        check_integrity()
+    elif cmd == "update":
+        update_repo()
+    elif cmd == "upgrade":
+        upgrade_packages()
+    else:
+        print("Unknown command.")
+        print("Usage: mypm install <package.tar.gz|name> | remove <package> | list | info <package> | check | update | upgrade")
+        sys.exit(1)
+
+
+
+
+if __name__ == "__main__":
+    main()

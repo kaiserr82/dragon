@@ -8,7 +8,7 @@ import json
 
 
 REPO_URL = "https://example.com/packages/packages.json"
-LOCAL_REPO = "/var/lib/mypm/repo.json"
+LOCAL_REPO = "/var/lib/pm/repo.json"
 
 # Wo speichern wir die Infos über installierte Pakete?
 PACKAGE_DB = "/var/lib/pm/"
@@ -129,7 +129,7 @@ def install_package(pkg_name_or_path):
     else:
         # Aus Repository laden
         if not os.path.exists(LOCAL_REPO):
-            print(colored("❌ Kein Repository lokal gefunden. Bitte zuerst 'mypm update' ausführen.", Colors.FAIL))
+            print(colored("❌ Kein Repository lokal gefunden. Bitte zuerst 'pm update' ausführen.", Colors.FAIL))
             return
         with open(LOCAL_REPO, "r") as f:
             repo = json.load(f)
@@ -138,14 +138,14 @@ def install_package(pkg_name_or_path):
             return
         url = repo[pkg_name_or_path]["url"]
         print(colored(f"⬇️  Lade Paket {pkg_name_or_path} von {url}", Colors.OKBLUE))
-        pkg_path = f"/tmp/{pkg_name_or_path}.tar.gz"
+        pkg_path = f"/tmp/{pkg_name_or_path}.pak"
         urllib.request.urlretrieve(url, pkg_path)
     
     # Dann wie bisher: Paket installieren
     install_package_from_tar(pkg_path)
 
 def install_package_from_tar(pkg_path):
-    """Installiert ein Paket aus einem .tar.gz Archiv und speichert installierte Dateien."""
+    """Installiert ein Paket aus einem .pak Archiv und speichert installierte Dateien."""
     # Hier kommt der vorherige Entpack- und Installationscode rein (mit Fortschritt usw.)
 
 
@@ -216,7 +216,7 @@ def upgrade_packages():
     """Installiert neuere Versionen installierter Pakete."""
     ensure_db()
     if not os.path.exists(LOCAL_REPO):
-        print(colored("❌ Kein Repository lokal gefunden. Bitte zuerst 'mypm update' ausführen.", Colors.FAIL))
+        print(colored("❌ Kein Repository lokal gefunden. Bitte zuerst 'pm update' ausführen.", Colors.FAIL))
         return
     
     with open(LOCAL_REPO, "r") as f:
@@ -249,7 +249,7 @@ def upgrade_packages():
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: mypm install <package.tar.gz|name> | remove <package> | list | info <package> | check | update | upgrade")
+        print("Usage: pm install <package.pak|name> | remove <package> | list | info <package> | check | update | upgrade")
         sys.exit(1)
 
     cmd = sys.argv[1]
@@ -270,7 +270,7 @@ def main():
         upgrade_packages()
     else:
         print("Unknown command.")
-        print("Usage: mypm install <package.tar.gz|name> | remove <package> | list | info <package> | check | update | upgrade")
+        print("Usage: pm install <package.pak|name> | remove <package> | list | info <package> | check | update | upgrade")
         sys.exit(1)
 
 

@@ -1,0 +1,1 @@
+gcc -o package_manager main.c -lcurl
